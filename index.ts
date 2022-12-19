@@ -5,7 +5,10 @@ import type { CLIOptions } from 'pwa-asset-generator/dist/models/options';
 import type { LoggerFunction } from 'pwa-asset-generator/dist/models/logger';
 import type { ManifestJsonIcon } from 'pwa-asset-generator/dist/models/result';
 import { writeFileSync } from 'fs';
+import { join, relative } from 'path';
 import { parse } from 'node-html-parser';
+
+const isProd = process.env.NODE_ENV === 'production';
 
 interface Manifest {
   name: string,
@@ -21,28 +24,22 @@ interface Manifest {
 
 interface GeneratorInput {
   source: string,
-  outputFolderPath: string,
   options?: CLIOptions,
   loggerFn?: LoggerFunction
 }
 
-const normalizePath = (s: string) => s.replace('static', '');
-
-const manifestTag = {
-  tagName: 'link',
-  rel: 'manifest',
-  href: '/manifest.json',
-};
-
 export type PluginOptions = Omit<_PluginOptions, 'pwaHead'> & { partialManifest: Omit<Manifest, 'icons'>, generatorInput: GeneratorInput }
 
-export default async function pluginPWAGenerator(context: LoadContext, options: PluginOptions): Promise<Plugin<void>> {
-  const { partialManifest, generatorInput } = options;
-  const { source, outputFolderPath, options: generatorOptions, loggerFn } = generatorInput;
-  const { savedImages, htmlMeta, manifestJsonContent } = await generateImages(source, outputFolderPath, generatorOptions, loggerFn);
-  const manifest: Manifest = { ...partialManifest, icons: manifestJsonContent };
-  writeFileSync('./static/manifest.json', JSON.stringify(manifest));
-  const pwaHead: _PluginOptions['pwaHead'] = [manifestTag];
+const getPWAHead = async ({ outDir }: LoadContext, { partialManifest, generatorInput }: PluginOptions) => {
+  const { source, options: generatorOptions, loggerFn } = generatorInput;
+  const { htmlMeta, manifestJsonContent } = await generateImages(source, outDir, generatorOptions, loggerFn);
+  const manifest: Manifest = { ...partialManifest, icons: manifestJsonContent.map(x => ({...x, src: relative(outDir, x.src)})) };
+  writeFileSync(join(outDir, 'manifest.json'), JSON.stringify(manifest));
+  const pwaHead: _PluginOptions['pwaHead'] = [{
+    tagName: 'link',
+    rel: 'manifest',
+    href: '/manifest.json',
+  }];
   for (const metatype of ['favicon', 'appleTouchIcon', 'appleMobileWebAppCapable', 'appleLaunchImage', 'appleLaunchImageDarkMode', 'msTileImage'] as const) {
     const html = htmlMeta[metatype];
     if (html) {
@@ -51,7 +48,7 @@ export default async function pluginPWAGenerator(context: LoadContext, options: 
         pwaHead.push({
           tagName: 'link',
           rel: link.getAttribute('rel'),
-          href: normalizePath(link.getAttribute('href')!),
+          href: relative(outDir, link.getAttribute('href')!),
           media: link.getAttribute('media')
         });
       }
@@ -64,10 +61,15 @@ export default async function pluginPWAGenerator(context: LoadContext, options: 
       }
     }
   }
+  return pwaHead;
+}
+
+export default async function pluginPWAGenerator(context: LoadContext, options: PluginOptions): Promise<Plugin<void>> {
+  const pwaHead: _PluginOptions['pwaHead'] = isProd ? await getPWAHead(context, options) : [];
   return await pluginPWA(context, { ...options, pwaHead });
 }
 
 export function validateOptions({ validate, options }: OptionValidationContext<PluginOptions, PluginOptions>): PluginOptions {
-  _validateOptions({ validate, options: { debug: options.debug, offlineModeActivationStrategies: options.offlineModeActivationStrategies, injectManifestConfig: options.injectManifestConfig, pwaHead: [manifestTag], swCustom: options.swCustom, swRegister: options.swRegister} });
-  return options;
+  const { partialManifest, generatorInput, ..._options } = options;
+  return { partialManifest, generatorInput, ..._validateOptions({ validate, options: _options })};
 }
