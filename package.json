@@ -28,6 +28,7 @@
   "author": "Songchen Tan",
   "license": "GPL-3.0",
   "dependencies": {
+    "node-html-parser": "^6.1.4",
     "pwa-asset-generator": "^6.2.0"
   }
 }
