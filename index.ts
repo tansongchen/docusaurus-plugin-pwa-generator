@@ -4,8 +4,8 @@ import { generateImages } from 'pwa-asset-generator';
 import type { CLIOptions } from 'pwa-asset-generator/dist/models/options';
 import type { LoggerFunction } from 'pwa-asset-generator/dist/models/logger';
 import type { ManifestJsonIcon } from 'pwa-asset-generator/dist/models/result';
-import { writeFileSync } from 'fs';
-import { join, relative } from 'path';
+import { writeFileSync, copyFileSync, readdirSync } from 'fs';
+import { join, relative, dirname } from 'path';
 import { parse } from 'node-html-parser';
 
 const isProd = process.env.NODE_ENV === 'production';
@@ -28,13 +28,19 @@ interface GeneratorInput {
   loggerFn?: LoggerFunction
 }
 
-export type PluginOptions = Omit<_PluginOptions, 'pwaHead'> & { partialManifest: Omit<Manifest, 'icons'>, generatorInput: GeneratorInput }
+export type PluginOptions = Omit<_PluginOptions, 'pwaHead'> & { partialManifest: Partial<Omit<Manifest, 'icons'>>, generatorInput: GeneratorInput };
 
-const getPWAHead = async ({ outDir }: LoadContext, { partialManifest, generatorInput }: PluginOptions) => {
+export type Options = Partial<PluginOptions>;
+
+const name = "docusaurus-plugin-pwa-generator";
+
+const getPWAHead = async ({ generatedFilesDir }: LoadContext, { partialManifest, generatorInput }: PluginOptions) => {
   const { source, options: generatorOptions, loggerFn } = generatorInput;
-  const { htmlMeta, manifestJsonContent } = await generateImages(source, outDir, generatorOptions, loggerFn);
-  const manifest: Manifest = { ...partialManifest, icons: manifestJsonContent.map(x => ({...x, src: relative(outDir, x.src)})) };
-  writeFileSync(join(outDir, 'manifest.json'), JSON.stringify(manifest));
+  const assetsDir = join(generatedFilesDir, name);
+  const { htmlMeta, manifestJsonContent } = await generateImages(source, assetsDir, generatorOptions, loggerFn);
+  const removePrefix = (x: string) => relative(assetsDir, x);
+  const manifest: Partial<Manifest> = { ...partialManifest, icons: manifestJsonContent.map(x => ({...x, src: removePrefix(x.src)})) };
+  writeFileSync(join(assetsDir, 'manifest.json'), JSON.stringify(manifest));
   const pwaHead: _PluginOptions['pwaHead'] = [{
     tagName: 'link',
     rel: 'manifest',
@@ -48,7 +54,7 @@ const getPWAHead = async ({ outDir }: LoadContext, { partialManifest, generatorI
         pwaHead.push({
           tagName: 'link',
           rel: link.getAttribute('rel'),
-          href: relative(outDir, link.getAttribute('href')!),
+          href: removePrefix(link.getAttribute('href')!),
           media: link.getAttribute('media')
         });
       }
@@ -66,7 +72,24 @@ const getPWAHead = async ({ outDir }: LoadContext, { partialManifest, generatorI
 
 export default async function pluginPWAGenerator(context: LoadContext, options: PluginOptions): Promise<Plugin<void>> {
   const pwaHead: _PluginOptions['pwaHead'] = isProd ? await getPWAHead(context, options) : [];
-  return await pluginPWA(context, { ...options, pwaHead });
+  const plugin = await pluginPWA(context, { ...options, pwaHead });
+  const base = dirname(require.resolve('@docusaurus/plugin-pwa'));
+  return {
+    ...plugin,
+    getThemePath() {
+      return join(base, plugin.getThemePath!());
+    },
+    getTypeScriptThemePath() {
+      return join(base, plugin.getTypeScriptThemePath!());
+    },
+    getClientModules() {
+      return plugin.getClientModules!().map(x => join(base, x));
+    },
+    postBuild({ generatedFilesDir, outDir }) {
+      const assetsDir = join(generatedFilesDir, name);
+      readdirSync(assetsDir).map(x => copyFileSync(join(assetsDir, x), join(outDir, x)));
+    }
+  }
 }
 
 export function validateOptions({ validate, options }: OptionValidationContext<PluginOptions, PluginOptions>): PluginOptions {
