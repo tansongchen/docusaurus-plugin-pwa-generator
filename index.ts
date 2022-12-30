@@ -45,6 +45,10 @@ const getPWAHead = async ({ generatedFilesDir }: LoadContext, { partialManifest,
     tagName: 'link',
     rel: 'manifest',
     href: '/manifest.json',
+  }, {
+    tagName: 'meta',
+    name: 'theme-color',
+    content: partialManifest.theme_color,
   }];
   for (const metatype of ['favicon', 'appleTouchIcon', 'appleMobileWebAppCapable', 'appleLaunchImage', 'appleLaunchImageDarkMode', 'msTileImage'] as const) {
     const html = htmlMeta[metatype];
@@ -85,9 +89,11 @@ export default async function pluginPWAGenerator(context: LoadContext, options: 
     getClientModules() {
       return plugin.getClientModules!().map(x => join(base, x));
     },
-    postBuild({ generatedFilesDir, outDir }) {
+    async postBuild(props) {
+      const { generatedFilesDir, outDir } = props;
       const assetsDir = join(generatedFilesDir, name);
       readdirSync(assetsDir).map(x => copyFileSync(join(assetsDir, x), join(outDir, x)));
+      await plugin.postBuild!(props);
     }
   }
 }
