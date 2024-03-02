@@ -1,6 +1,6 @@
 {
   "name": "docusaurus-plugin-pwa-generator",
-  "version": "0.1.5",
+  "version": "0.1.7",
   "description": "",
   "main": "index.js",
   "files": [
@@ -11,11 +11,11 @@
     "docusaurus"
   ],
   "devDependencies": {
-    "@docusaurus/types": "^2.2.0",
-    "typescript": "^4.9.4"
+    "@docusaurus/types": "^3.1.1",
+    "typescript": "^5.3.3"
   },
   "peerDependencies": {
-    "@docusaurus/plugin-pwa": "^2.2.0"
+    "@docusaurus/plugin-pwa": "^3.1.1"
   },
   "scripts": {
     "build": "tsc",
@@ -28,7 +28,7 @@
   "author": "Songchen Tan",
   "license": "GPL-3.0",
   "dependencies": {
-    "node-html-parser": "^6.1.4",
-    "pwa-asset-generator": "^6.2.0"
+    "node-html-parser": "^6.1.12",
+    "pwa-asset-generator": "^6.3.1"
   }
 }
